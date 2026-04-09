@@ -8,7 +8,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 const client        = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-const OWNER_NUMBER  = 'whatsapp:+12369926522';
+const OWNER_NUMBER  = 'whatsapp:+5519991104049';
 const TWILIO_NUMBER = process.env.TWILIO_WHATSAPP_NUMBER;
 const PIX_KEY       = '+55 19 99566-7073';
 const RESTAURANT    = 'Cozinha Oriental e Pastelaria do Japonês';
