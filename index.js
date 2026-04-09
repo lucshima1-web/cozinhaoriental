@@ -130,37 +130,65 @@ app.post('/webhook', async (req, res) => {
   const mediaUrl = req.body.MediaUrl0;
   const mediaType = (req.body.MediaContentType0 || '');
 
-  // ── Operador ───────────────────────────────────────────────────────────────
-  if (from === OWNER_NUMBER) {
+  // Permite OWNER testar como cliente usando "cliente ..."
+  let effectiveRaw = raw;
+  if (from === OWNER_NUMBER && lower.startsWith('cliente ')) {
+    effectiveRaw = raw.substring(8).trim();
+  }
+
+  // ── Operador ───────────────────────────────────────────────
+  if (from === OWNER_NUMBER && !lower.startsWith('cliente ')) {
     if (upper.startsWith('OK ')) {
       const clientNum = raw.split(' ')[1];
       const s = sessions[clientNum];
+
       if (s?.step === 'pending_approval') {
         s.step = 'done';
+
         await send(clientNum,
           `✅ *Pedido ${s.orderId} confirmado!* 🎉\n\n` +
           `Olá ${s.name}, seu pedido está sendo preparado! 🍣\n\n` +
           `${cartSummary(s.cart)}\n\n` +
           `Dúvidas? *${PIX_KEY}*\nObrigado! 🙏`
         );
-        await send(OWNER_NUMBER, `✅ Confirmação enviada para ${s.name} (${s.orderId}).`);
+
+        await send(OWNER_NUMBER,
+          `✅ Confirmação enviada para ${s.name} (${s.orderId}).`
+        );
+
         resetSession(clientNum);
       } else {
-        await send(OWNER_NUMBER, `⚠️ Pedido não encontrado ou já processado.`);
+        await send(OWNER_NUMBER,
+          `⚠️ Pedido não encontrado ou já processado.`
+        );
       }
+
     } else if (upper.startsWith('NAO ')) {
       const clientNum = raw.split(' ')[1];
       const s = sessions[clientNum];
+
       if (s?.step === 'pending_approval') {
         s.step = 'done';
-        await send(clientNum, `❌ Não conseguimos aceitar seu pedido agora.\nFale conosco: *${PIX_KEY}*`);
-        await send(OWNER_NUMBER, `❌ Pedido de ${s.name} (${s.orderId}) cancelado.`);
+
+        await send(clientNum,
+          `❌ Não conseguimos aceitar seu pedido agora.\nFale conosco: *${PIX_KEY}*`
+        );
+
+        await send(OWNER_NUMBER,
+          `❌ Pedido de ${s.name} (${s.orderId}) cancelado.`
+        );
+
         resetSession(clientNum);
       }
     }
+
     return;
   }
 
+  const session = getSession(from);
+
+  await processText(from, session, effectiveRaw);
+});
   // ── Áudio: transcrever com Whisper ────────────────────────────────────────
   if (numMedia > 0 && mediaType.includes('audio')) {
     const session = getSession(from);
