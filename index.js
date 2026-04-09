@@ -130,68 +130,51 @@ app.post('/webhook', async (req, res) => {
   const mediaUrl = req.body.MediaUrl0;
   const mediaType = (req.body.MediaContentType0 || '');
 
-  // ── Operador ───────────────────────────────────────────────────────────────
-  if (from === OWNER_NUMBER) {
-    if (upper.startsWith('OK ')) {
-      const clientNum = raw.split(' ')[1];
-      const s = sessions[clientNum];
-      if (s?.step === 'pending_approval') {
-        s.step = 'done';
-        await send(clientNum,
-          `✅ *Pedido ${s.orderId} confirmado!* 🎉\n\n` +
-          `Olá ${s.name}, seu pedido está sendo preparado! 🍣\n\n` +
-          `${cartSummary(s.cart)}\n\n` +
-          `Dúvidas? *${PIX_KEY}*\nObrigado! 🙏`
-        );
-        await send(OWNER_NUMBER, `✅ Confirmação enviada para ${s.name} (${s.orderId}).`);
-        resetSession(clientNum);
-      } else {
-        await send(OWNER_NUMBER, `⚠️ Pedido não encontrado ou já processado.`);
-      }
-    } else if (upper.startsWith('NAO ')) {
-      const clientNum = raw.split(' ')[1];
-      const s = sessions[clientNum];
-      if (s?.step === 'pending_approval') {
-        s.step = 'done';
-        await send(clientNum, `❌ Não conseguimos aceitar seu pedido agora.\nFale conosco: *${PIX_KEY}*`);
-        await send(OWNER_NUMBER, `❌ Pedido de ${s.name} (${s.orderId}) cancelado.`);
-        resetSession(clientNum);
-      }
+ // ── Operador simplificado ───────────────────────────────────────────────
+if (from === OWNER_NUMBER) {
+  // Confirmar pedido com "OK"
+  if (upper === 'OK') {
+    // pega o primeiro pedido pendente
+    const pendingClientEntry = Object.entries(sessions).find(([num, s]) => s.step === 'pending_approval');
+    if (pendingClientEntry) {
+      const [clientNum, s] = pendingClientEntry;
+      s.step = 'done';
+
+      await send(clientNum,
+        `✅ *Pedido ${s.orderId} confirmado!* 🎉\n\n` +
+        `Olá ${s.name}, seu pedido está sendo preparado! 🍣\n\n` +
+        `${cartSummary(s.cart)}\n\n` +
+        `Dúvidas? *${PIX_KEY}*\nObrigado! 🙏`
+      );
+
+      await send(OWNER_NUMBER,
+        `✅ Confirmação enviada para ${s.name} (${s.orderId}).`
+      );
+
+      resetSession(clientNum);
+    } else {
+      await send(OWNER_NUMBER, `⚠️ Nenhum pedido pendente para confirmar.`);
     }
-    return;
+
+  // Cancelar pedido com "NAO"
+  } else if (upper === 'NAO') {
+    const pendingClientEntry = Object.entries(sessions).find(([num, s]) => s.step === 'pending_approval');
+    if (pendingClientEntry) {
+      const [clientNum, s] = pendingClientEntry;
+      s.step = 'done';
+
+      await send(clientNum, `❌ Não conseguimos aceitar seu pedido agora.\nFale conosco: *${PIX_KEY}*`);
+      await send(OWNER_NUMBER, `❌ Pedido de ${s.name} (${s.orderId}) cancelado.`);
+
+      resetSession(clientNum);
+    } else {
+      await send(OWNER_NUMBER, `⚠️ Nenhum pedido pendente para cancelar.`);
+    }
   }
 
-  // ── Áudio: transcrever com Whisper ────────────────────────────────────────
-  if (numMedia > 0 && mediaType.includes('audio')) {
-    const session = getSession(from);
-
-    await send(from, `🎤 Recebi seu áudio! Transcrevendo... um segundo ⏳`);
-
-    let transcribed = '';
-    try {
-      transcribed = await transcribeAudio(mediaUrl);
-    } catch (e) {
-      console.error('Whisper error:', e.message);
-      await send(from, `😕 Não consegui entender o áudio desta vez.\nPor favor, tente digitar sua mensagem.`);
-      return;
-    }
-
-    if (!transcribed || transcribed.length < 2) {
-      await send(from, `😕 Não consegui transcrever o áudio. Pode tentar falar mais devagar ou digitar?`);
-      return;
-    }
-
-    // Mostrar transcrição e pedir confirmação
-    session.pendingTranscription = transcribed;
-    await send(from,
-      `🎤 *Entendi o seguinte:*\n\n"${transcribed}"\n\n` +
-      `Está correto?\n*SIM* — usar este texto\n*NÃO* — cancelar e digitar manualmente`
-    );
-    session._prevStep = session.step;
-    session.step = 'confirm_transcription';
-    return;
-  }
-
+  // Sai do fluxo do cliente
+  return;
+}
   // ── Mídia não-áudio (imagem, vídeo, doc) ─────────────────────────────────
   if (numMedia > 0 && !mediaType.includes('audio')) {
     const session = getSession(from);
